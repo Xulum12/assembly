@@ -1,0 +1,266 @@
+%define FREE_SPACE 0x9000
+
+ORG 0x7C00
+[BITS 16]
+jmp nm
+pmo:
+
+jmp noerror
+
+gdt_start:
+
+gdt_null:
+    dd 0x0
+    dd 0x0
+
+gdt_code:
+    dw 0xffff
+    dw 0x0
+    db 0x0
+    db 10011010b
+    db 11001111b
+    db 0x0
+
+gdt_data:
+    dw 0xffff
+    dw 0x0
+    db 0x0
+    db 10010010b
+    db 11001111b
+    db 0x0
+
+gdt_end:
+
+gdt_descriptor:
+    dw gdt_end - gdt_start
+    dd gdt_start
+
+CODE_SEG equ gdt_code - gdt_start
+DATA_SEG equ gdt_data - gdt_start
+
+noerror:
+
+    mov ax, 0
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+
+    cli
+    lgdt[gdt_descriptor]
+    mov eax, cr0
+    or eax, 0x1
+    mov cr0, eax
+    jmp CODE_SEG:stpm
+
+[bits 32]
+
+stpm:
+    mov ax, DATA_SEG
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+    mov ebp, 0x2000
+    mov esp, ebp
+
+mov al, 'q'
+mov ah, 0x0f
+mov [0xb8000], ax
+
+
+jmp pmo
+
+
+
+[bits 16]
+nm:
+
+Main:
+    jmp 0x0000:.FlushCS               
+
+
+.FlushCS:   
+    xor ax, ax
+
+ 
+    mov ss, ax
+  
+    mov sp, Main
+
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    cld
+
+    call CheckCPU                     
+    jc pmo
+
+
+    mov edi, FREE_SPACE
+
+    jmp SwitchToLongMode
+
+
+BITS 16
+
+
+%define PAGE_PRESENT    (1 << 0)
+%define PAGE_WRITE      (1 << 1)
+
+%define CODE_SEG     0x0008
+%define DATA_SEG     0x0010
+
+ALIGN 4
+IDT:
+    .Length       dw 0
+    .Base         dd 0
+
+SwitchToLongMode: 
+    push di
+    mov ecx, 0x1000
+    xor eax, eax
+    cld
+    rep stosd
+    pop di
+
+    lea eax, [es:di + 0x1000]        
+    or eax, PAGE_PRESENT | PAGE_WRITE
+    mov [es:di], eax 
+
+
+
+    lea eax, [es:di + 0x2000]         
+    or eax, PAGE_PRESENT | PAGE_WRITE 
+    mov [es:di + 0x1000], eax         
+
+
+
+    lea eax, [es:di + 0x3000]         
+    or eax, PAGE_PRESENT | PAGE_WRITE 
+    mov [es:di + 0x2000], eax         
+
+
+    push di                          
+    lea di, [di + 0x3000]             
+    mov eax, PAGE_PRESENT | PAGE_WRITE    
+
+
+
+.LoopPageTable:
+    mov [es:di], eax
+    add eax, 0x1000
+    add di, 8
+    cmp eax, 0x200000               
+    jb .LoopPageTable
+
+    pop di 
+
+
+    mov al, 0xFF                
+    out 0x21, al
+
+    nop
+    nop
+
+    lidt [IDT]                       
+
+
+    mov eax, 10100000b 
+    mov cr4, eax
+
+    mov edx, edi  
+    mov cr3, edx
+
+    mov ecx, 0xC0000080
+    rdmsr    
+
+    or eax, 0x00000100
+    wrmsr
+
+    mov ebx, cr0
+    or ebx,0x80000001
+    mov cr0, ebx                    
+
+    lgdt [GDT.Pointer]
+
+    jmp CODE_SEG:LongMode
+
+
+
+GDT:
+.Null:
+    dq 0x0000000000000000
+ 
+.Code:
+    dq 0x00209A0000000000         
+    dq 0x0000920000000000
+ALIGN 4
+    dw 0
+ 
+.Pointer:
+    dw $ - GDT - 1
+    dd GDT
+ 
+ 
+[BITS 64]      
+LongMode:
+    mov ax, DATA_SEG
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+    mov edi, 0xB8000
+    mov rcx, 500                      
+    mov rax, 0x1F201F201F201F20       
+    rep stosq                        
+ 
+    hlt
+	lol:
+jmp lol
+[bits 16]
+
+CheckCPU:
+
+    pushfd
+ 
+    pop eax
+    mov ecx, eax  
+    xor eax, 0x200000 
+    push eax 
+    popfd
+ 
+    pushfd 
+    pop eax
+    xor eax, ecx
+    shr eax, 21 
+    and eax, 1
+    push ecx
+    popfd 
+ 
+    test eax, eax
+    jz pmo
+ 
+    mov eax, 0x80000000   
+    cpuid                 
+ 
+    cmp eax, 0x80000001
+    jb pmo
+ 
+    mov eax, 0x80000001  
+    cpuid                 
+    test edx, 1 << 29
+    jz pmo
+ 
+    ret
+ 
+
+
+times 510 - ($-$$) db 0
+dw 0xAA55
