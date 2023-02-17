@@ -1,0 +1,432 @@
+%define FREE_SPACE 0x9000
+
+ORG 0x7C00
+[bits 16]
+
+mov [BOOT_DISK], dl                 
+
+
+
+
+mov bx, 0x7e00
+
+
+
+mov ah, 2
+mov al, 1
+mov ch, 0
+mov dh, 0
+mov cl, 2
+mov dl, [BOOT_DISK]
+int 0x13
+
+
+
+
+    mov ax,118h ; init 800x600 32bit
+    mov     bx,ax
+    mov     ax,4f02h
+    int     16
+
+Main:
+    jmp 0x0000:.FlushCS               
+
+
+.FlushCS:   
+    xor ax, ax
+
+ 
+    mov ss, ax
+  
+    mov sp, Main
+
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    cld
+
+    call CheckCPU                     
+    jc nlm
+
+
+    mov edi, FREE_SPACE
+
+    jmp SwitchToLongMode
+BOOT_DISK: db 0
+nlm:
+
+
+
+BITS 16
+
+
+%define PAGE_PRESENT    (1 << 0)
+%define PAGE_WRITE      (1 << 1)
+
+%define CODE_SEG     0x0008
+%define DATA_SEG     0x0010
+
+ALIGN 4
+IDT:
+    .Length       dw 0
+    .Base         dd 0
+
+SwitchToLongMode: 
+    push di
+    mov ecx, 0x1000
+    xor eax, eax
+    cld
+    rep stosd
+    pop di
+
+    lea eax, [es:di + 0x1000]        
+    or eax, PAGE_PRESENT | PAGE_WRITE
+    mov [es:di], eax 
+
+
+
+    lea eax, [es:di + 0x2000]         
+    or eax, PAGE_PRESENT | PAGE_WRITE 
+    mov [es:di + 0x1000], eax         
+
+
+
+    lea eax, [es:di + 0x3000]         
+    or eax, PAGE_PRESENT | PAGE_WRITE 
+    mov [es:di + 0x2000], eax         
+
+
+    push di                          
+    lea di, [di + 0x3000]             
+    mov eax, PAGE_PRESENT | PAGE_WRITE    
+
+
+
+.LoopPageTable:
+    mov [es:di], eax
+    add eax, 0x1000
+    add di, 8
+    cmp eax, 0x200000               
+    jb .LoopPageTable
+
+    pop di 
+
+
+    mov al, 0xFF                
+    out 0x21, al
+
+    nop
+    nop
+
+    lidt [IDT]                       
+
+
+    mov eax, 10100000b 
+    mov cr4, eax
+
+    mov edx, edi  
+    mov cr3, edx
+
+    mov ecx, 0xC0000080
+    rdmsr    
+
+    or eax, 0x00000100
+    wrmsr
+
+    mov ebx, cr0
+    or ebx,0x80000001
+    mov cr0, ebx                    
+
+    lgdt [GDT.Pointer]
+
+    jmp CODE_SEG:LongMode
+
+
+
+GDT:
+.Null:
+    dq 0x0000000000000000
+ 
+.Code:
+    dq 0x00209A0000000000         
+    dq 0x0000920000000000
+ALIGN 4
+    dw 0
+ 
+.Pointer:
+    dw $ - GDT - 1
+    dd GDT
+ 
+ 
+[BITS 64]      
+LongMode:
+    mov ax, DATA_SEG
+    mov ds, ax
+    mov es, ax
+	mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+; --------------------------------
+
+
+
+mov r8, 0
+mov r9, 0
+jmp b
+l0: ; r8=y r9=x
+inc r10
+mov al,[r10]
+
+cmp al, "}"
+je ebf
+cmp al, "."
+je ou
+cmp al, "l"
+je l
+cmp al, "I"
+je I
+cmp al, "1"
+je eg
+cmp al, '!'
+je felk
+cmp al, '0'
+je nu
+
+jmp l0
+
+l:
+inc r8
+jmp l0
+
+I:
+dec r8
+jmp l0
+
+eg:
+inc r9
+jmp l0
+
+felk:
+dec r9
+jmp l0
+
+nu:
+mov r8, 0
+mov r9, 0
+jmp l0
+
+ouu:
+
+;mov ecx,  00000000111111111111111110001000b
+
+mov rax, 1024
+
+mul r8
+add rax, rdx
+
+
+add rax, r9
+
+mov rdx, 3
+mul rdx
+add rax, rdx
+
+    mov rdi,rax
+   mov [0a0000h+rax], rcx
+
+
+   stosb           
+
+
+    jmp l0
+	
+
+
+
+
+	lol:
+jmp lol
+[bits 16]
+
+CheckCPU:
+
+    pushfd
+ 
+    pop eax
+    mov ecx, eax  
+    xor eax, 0x200000 
+    push eax 
+    popfd
+ 
+    pushfd 
+    pop eax
+    xor eax, ecx
+    shr eax, 21 
+    and eax, 1
+    push ecx
+    popfd 
+ 
+    test eax, eax
+    jz nlm
+ 
+    mov eax, 0x80000000   
+    cpuid                 
+ 
+    cmp eax, 0x80000001
+    jb nlm
+ 
+    mov eax, 0x80000001  
+    cpuid                 
+    test edx, 1 << 29
+    jz nlm
+ 
+    ret
+ 
+
+
+times 510 - ($-$$) db 0
+dw 0xAA55
+
+[bits 64]
+b:
+mov r10, szar
+mov r11, bfram
+
+ps:
+mov al, [r10]
+cmp al, 0
+je lol
+cmp al, '+'
+je pl
+cmp al, '-'
+je mn
+cmp al, '>'
+je gr
+cmp al, '<'
+je gl
+cmp al, '['
+je sl
+cmp al, ']'
+je el
+cmp al, ','
+je ip
+cmp al, '.'
+je ebf
+cmp al, '{'
+je l0
+ebf:
+inc r10
+jmp ps
+pl:
+mov cl, [r11]
+cmp cl, 255
+je plq
+inc cl
+mov [r11], cl
+jmp ebf
+plq:
+mov cl, 0
+mov [r11], cl
+jmp ebf
+mn:
+mov cl, [r11]
+cmp cl, 0
+je mnq
+dec cl
+mov [r11], cl
+jmp ebf
+mnq:
+mov cl, 11111111b
+mov [r11], cl
+jmp ebf
+gr:
+inc r11
+jmp ebf
+gl:
+dec r11
+jmp ebf
+sl:
+mov r12, 0
+mov al, [r11]
+cmp al, 0
+je sle
+jmp ebf
+sle:
+inc r10
+mov al, [r10]
+cmp al, '['
+je zz
+cmp al, ']'
+je z
+jmp sle
+z:
+cmp r12, 0
+je ebf
+dec r12
+jmp sle
+zz:
+inc r12
+jmp sle
+
+el:
+;mov ecx, 0
+mov al, [r11]
+cmp al, 0
+jne ele
+jmp ebf
+ele:
+dec r10
+mov al, [r10]
+cmp al, '['
+je q
+cmp al, ']'
+je qq
+jmp ele
+q:
+cmp r12, 0
+je ebf
+dec r12
+jmp ele
+qq:
+inc r12
+jmp ele
+ip:
+
+jmp ebf
+
+
+
+ou:
+sub r11, 2
+mov al, [r11]
+mov ah, 00000000b
+mov edx, 1111111111111111b
+mul edx
+add eax, edx
+inc eax
+mov ax, 0000000000000000b
+mov ecx, eax
+inc r11
+mov cl, [r11]
+mov ch, cl
+inc r11
+mov cl, [r11]
+jmp ouu
+
+
+
+
+
+
+
+
+jmp lol
+szar:
+db "->->>+++++++++++++[<++++++++++>-]<++++++>+++++++++[-<{l.}>]", 0
+
+bfram:
+db 0
+
+times 1024 - ($-$$) db 0
